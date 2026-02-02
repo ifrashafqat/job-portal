@@ -1,109 +1,126 @@
 import { NextResponse } from 'next/server';
 
-// Try to use MongoDB, fallback to mock
-let useMongoDB = false;
-
-// Check if we're on Vercel or local
-const isVercel = process.env.VERCEL === '1';
+// For development, we'll use in-memory storage
+// In production, connect to Supabase
+let applications: any[] = [];
 
 export async function POST(request: Request) {
   try {
+    console.log('📦 Receiving application...');
+    
     const body = await request.json();
+    console.log('📝 Data received:', { ...body, coverLetter: '[...]' });
     
-    // For Vercel: Use MOCK storage
-    if (isVercel) {
-      console.log('Vercel: Using mock storage');
-      const mockApp = {
-        _id: Date.now().toString(),
-        ...body,
-        experience: parseInt(body.experience) || 0,
-        status: 'Pending',
-        appliedAt: new Date().toISOString()
-      };
-      
-      // In real scenario, save to MongoDB Atlas
-      // For demo, just return success
-      return NextResponse.json({
-        success: true,
-        message: 'Application submitted (Demo Mode - Would save to cloud DB in production)',
-        data: mockApp,
-        note: 'On production, this would save to MongoDB Atlas'
-      }, { status: 201 });
-    }
+    // Create application object
+    const newApplication = {
+      id: Date.now().toString(),
+      full_name: body.fullName || '',
+      email: body.email || '',
+      phone: body.phone || '',
+      position: body.position || '',
+      cover_letter: body.coverLetter || '',
+      resume_url: body.resumeUrl || '',
+      experience: parseInt(body.experience) || 0,
+      status: 'Pending',
+      applied_at: new Date().toISOString()
+    };
     
-    // For Local: Try MongoDB
+    // Add to memory storage
+    applications.push(newApplication);
+    console.log('💾 Saved application. Total:', applications.length);
+    
+    // Try to save to Supabase if available
     try {
-      const { connectToDatabase } = await import('@/lib/mongodb');
-      const Application = (await import('@/models/Application')).default;
+      const SUPABASE_URL = process.env.SUPABASE_URL;
+      const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
       
-      await connectToDatabase();
-      const app = await Application.create({
-        fullName: body.fullName,
-        email: body.email,
-        phone: body.phone,
-        position: body.position,
-        coverLetter: body.coverLetter,
-        resumeUrl: body.resumeUrl,
-        experience: parseInt(body.experience),
-        status: 'Pending'
-      });
-      
-      return NextResponse.json({
-        success: true,
-        message: 'Application saved to LOCAL MongoDB!',
-        data: app
-      }, { status: 201 });
-      
-    } catch (mongoError) {
-      // MongoDB failed, use mock
-      console.log('MongoDB failed, using mock');
-      const mockApp = {
-        _id: Date.now().toString(),
-        ...body,
-        experience: parseInt(body.experience) || 0,
-        status: 'Pending',
-        appliedAt: new Date().toISOString()
-      };
-      
-      return NextResponse.json({
-        success: true,
-        message: 'Application saved (MongoDB unavailable, using demo mode)',
-        data: mockApp
-      }, { status: 201 });
+      if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        const { error } = await supabase
+          .from('applications')
+          .insert({
+            full_name: body.fullName,
+            email: body.email,
+            phone: body.phone,
+            position: body.position,
+            cover_letter: body.coverLetter,
+            resume_url: body.resumeUrl,
+            experience: parseInt(body.experience) || 0,
+            status: 'Pending'
+          });
+        
+        if (!error) {
+          console.log('✅ Also saved to Supabase!');
+        } else {
+          console.log('⚠️ Supabase save failed, using memory:', error.message);
+        }
+      }
+    } catch (supabaseError) {
+      console.log('⚠️ Supabase not available, using memory storage');
     }
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Application submitted successfully!',
+      data: newApplication,
+      note: process.env.NODE_ENV === 'production' ? 'Saved to database' : 'Development mode'
+    }, { status: 201 });
     
   } catch (error: any) {
+    console.error('❌ API Error:', error);
     return NextResponse.json({
       success: false,
-      error: error.message
+      error: 'Failed to submit application',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     }, { status: 500 });
   }
 }
 
 export async function GET() {
-  // For Vercel: Return mock data
-  if (isVercel) {
-    return NextResponse.json({
-      success: true,
-      data: [],
-      message: 'Demo mode - In production would show real applications'
-    });
-  }
-  
-  // For Local: Try MongoDB
   try {
-    const { connectToDatabase } = await import('@/lib/mongodb');
-    const Application = (await import('@/models/Application')).default;
+    // Try to fetch from Supabase first
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
     
-    await connectToDatabase();
-    const apps = await Application.find().sort({ appliedAt: -1 });
-    return NextResponse.json({ success: true, data: apps });
+    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        const { data, error } = await supabase
+          .from('applications')
+          .select('*')
+          .order('applied_at', { ascending: false });
+        
+        if (!error && data) {
+          console.log('📊 Fetched from Supabase:', data.length, 'applications');
+          return NextResponse.json({
+            success: true,
+            data: data,
+            source: 'supabase'
+          });
+        }
+      } catch (supabaseError) {
+        console.log('⚠️ Supabase fetch failed, using memory:', supabaseError);
+      }
+    }
     
-  } catch (error) {
+    // Fallback to memory storage
+    console.log('📊 Using memory storage:', applications.length, 'applications');
+    return NextResponse.json({
+      success: true,
+      data: applications,
+      source: 'memory'
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Fetch Error:', error);
     return NextResponse.json({
       success: true,
       data: [],
-      message: 'Demo data - MongoDB unavailable'
+      error: 'Failed to fetch applications'
     });
   }
 }

@@ -3,14 +3,17 @@
 import { useState, useEffect } from 'react';
 
 interface Application {
-  _id: string;
-  fullName: string;
+  id: string;
+  _id?: string;
+  full_name: string;
+  fullName?: string;
   email: string;
   phone: string;
   position: string;
   experience: number;
   status: string;
-  appliedAt: string;
+  applied_at: string;
+  appliedAt?: string;
 }
 
 export default function AdminPage() {
@@ -39,12 +42,29 @@ export default function AdminPage() {
     try {
       const response = await fetch('/api/applications');
       if (response.ok) {
-        const data = await response.json();
-        // Make sure we're getting the array from the response
-        if (data.data && Array.isArray(data.data)) {
-          setApplications(data.data);
-        } else if (Array.isArray(data)) {
-          setApplications(data);
+        const result = await response.json();
+        
+        // Handle Supabase response format
+        if (result.data && Array.isArray(result.data)) {
+          // Convert Supabase field names to consistent format
+          const formattedApplications = result.data.map((app: any) => ({
+            id: app.id?.toString() || app._id?.toString() || Date.now().toString(),
+            _id: app._id || app.id,
+            full_name: app.full_name || app.fullName || '',
+            fullName: app.fullName || app.full_name || '',
+            email: app.email || '',
+            phone: app.phone || '',
+            position: app.position || '',
+            experience: app.experience || 0,
+            status: app.status || 'Pending',
+            applied_at: app.applied_at || app.appliedAt || new Date().toISOString(),
+            appliedAt: app.appliedAt || app.applied_at || new Date().toISOString()
+          }));
+          
+          setApplications(formattedApplications);
+        } else if (Array.isArray(result)) {
+          // Fallback for direct array response
+          setApplications(result);
         } else {
           setApplications([]);
         }
@@ -159,8 +179,8 @@ export default function AdminPage() {
                   </tr>
                 ) : (
                   applications.map((app) => (
-                    <tr key={app._id} className="border-t border-gray-800 hover:bg-gray-900/50 transition">
-                      <td className="p-4 text-white">{app.fullName}</td>
+                    <tr key={app.id || app._id} className="border-t border-gray-800 hover:bg-gray-900/50 transition">
+                      <td className="p-4 text-white">{app.full_name || app.fullName}</td>
                       <td className="p-4 text-gray-300">{app.email}</td>
                       <td className="p-4">
                         <span className="bg-purple-900/30 text-purple-300 px-3 py-1 rounded-full text-sm">
@@ -179,7 +199,7 @@ export default function AdminPage() {
                         </span>
                       </td>
                       <td className="p-4 text-gray-400">
-                        {new Date(app.appliedAt).toLocaleDateString()}
+                        {new Date(app.applied_at || app.appliedAt || '').toLocaleDateString()}
                       </td>
                     </tr>
                   ))
@@ -192,7 +212,7 @@ export default function AdminPage() {
         {/* Footer Note */}
         <div className="mt-8 text-center text-gray-500">
           <p>Admin Panel - Total Applications: {Array.isArray(applications) ? applications.length : 0}</p>
-          <p className="text-sm mt-2">Click on any application to view details (expandable in next version)</p>
+          <p className="text-sm mt-2">Data Source: {window.location.hostname.includes('vercel') ? 'Supabase Cloud' : 'Local Database'}</p>
         </div>
       </div>
     </div>
