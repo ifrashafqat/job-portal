@@ -1,6 +1,16 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+
+// Check if we're on the admin deployment
+const isAdminDomain = process.env.VERCEL_URL?.includes('admin-') || 
+                      process.env.NEXT_PUBLIC_ADMIN_MODE === 'true';
 
 export default function Home() {
+  // AUTO-REDIRECT if on admin domain
+  if (isAdminDomain) {
+    redirect('/admin');
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-[#0f0b1e] via-[#1e1b38] to-[#2d1b69] p-8">
       <div className="max-w-7xl mx-auto">
@@ -93,4 +103,4 @@ export default function Home() {
       </div>
     </main>
   );
-}``
+}
