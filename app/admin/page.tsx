@@ -32,15 +32,17 @@ export default function AdminPage() {
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'detail'>('table');
 
-  // Simple password protection
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === 'admin123') {
-      setAuthenticated(true);
-    } else {
-      alert('Incorrect password');
-    }
-  };
+ // Simple password protection - now uses environment variable
+const handleLogin = (e: React.FormEvent) => {
+  e.preventDefault();
+  const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'admin123';
+  
+  if (password === adminPassword) {
+    setAuthenticated(true);
+  } else {
+    alert('Incorrect password');
+  }
+};
 
   useEffect(() => {
     if (authenticated) {
